@@ -92,9 +92,9 @@ int main(int argc, char *argv[])
 void handle_request(int sock)
 {
     int n;
-    char buffer[256];
-    bzero(buffer,256);
-    n = read(sock,buffer,255);  // GET / HTTP/1.1
+    char buffer[512];
+    bzero(buffer,511);
+    n = read(sock,buffer,511);  // GET / HTTP/1.1
                                 // GET /example.html HTTP/1.1
     if (n < 0) 
         error("ERROR reading from socket");
