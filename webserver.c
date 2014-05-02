@@ -8,8 +8,8 @@
 #include <signal.h> /* signal name macros, and the kill() prototype */
 #include <sys/stat.h>
 #include <string.h>
-const int BUF_SIZE = 4096; 
-
+const int FILE_BUF_SIZE = 4096; 
+const int REQUEST_BUF_SIZE = 1024; 
 
 void sigchld_handler(int s)
 {
@@ -30,11 +30,18 @@ int main(int argc, char *argv[])
 {
     int sockfd, newsockfd, portno, pid;
 
-    // set port number
-    portno = 20000;
+    if (argc != 2)
+    {
+        printf("Please provide a port number to run the server!\n");
+        error("No port number provided");
+    }
+
+    //get the point number from command line arg 
+    portno = atoi(argv[1]);
+
     socklen_t clilen;
     struct sockaddr_in serv_addr, cli_addr;
-    struct sigaction sa;          // for signal SIGCHLD
+    struct sigaction sa;          
 
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0) 
@@ -92,9 +99,9 @@ int main(int argc, char *argv[])
 void handle_request(int sock)
 {
     int n;
-    char buffer[512];
-    bzero(buffer,511);
-    n = read(sock,buffer,511);  // GET / HTTP/1.1
+    char buffer[REQUEST_BUF_SIZE];
+    bzero(buffer,REQUEST_BUF_SIZE-1);
+    n = read(sock,buffer,REQUEST_BUF_SIZE-1);  // GET / HTTP/1.1
                                 // GET /example.html HTTP/1.1
     if (n < 0) 
         error("ERROR reading from socket");
@@ -161,27 +168,30 @@ int send_response(int sock, char* request_uri)
     char f_size_str[32];
     snprintf(f_size_str,31,"%d",f_size);
 
+    //create a timestamp string 
     //create the header from previously parsed info and write it to the socket
-    char header[512];
+    char header[128 + strlen(content_type) + strlen(f_size_str)];
     snprintf(header,511,"HTTP/1.1 200 OK\r\nContent-Type: \
         %s\r\nContent-Length: %s\r\n\r\n", content_type, f_size_str);
+    
+    //print out the header(FOR DEBUGGING)
     printf("%s\n",header);
 
     if(write(sock,header,strlen(header)) < 0)
         error("Writing HTTP header failed!\n");
 
     //write file to socket(incrementally to accomodate big files)
-    char* buf[BUF_SIZE];
+    char* buf[FILE_BUF_SIZE];
     size_t amt; 
     while(1)
     {
-        amt = fread(buf,sizeof(char),BUF_SIZE,f);
+        amt = fread(buf,sizeof(char),FILE_BUF_SIZE,f);
         if(write(sock,buf,amt) < 0)
             error("Writing HTTP body to client failed!\n");
 
         //the entire file has been read if the last fread() did not 
         //fill the buffer. 
-        if (amt < BUF_SIZE)
+        if (amt < FILE_BUF_SIZE)
           break; 
     }
 
