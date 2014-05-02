@@ -16,7 +16,7 @@ void sigchld_handler(int s)
     while(waitpid(-1, NULL, WNOHANG) > 0);
 }
 
-void dostuff(int); /* function prototype */
+void handle_request(int sock); /* function prototype */
 int send_response(int sock, char* request_uri);
 int send_http_error(int sock,char* status_code);
 
@@ -165,7 +165,9 @@ int send_response(int sock, char* request_uri)
     char header[512];
     snprintf(header,511,"HTTP/1.1 200 OK\r\nContent-Type: \
         %s\r\nContent-Length: %s\r\n\r\n", content_type, f_size_str);
-    if(write(sock,header) < 0)
+    printf("%s\n",header);
+
+    if(write(sock,header,strlen(header)) < 0)
         error("Writing HTTP header failed!\n");
 
     //write file to socket(incrementally to accomodate big files)
