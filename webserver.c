@@ -8,17 +8,17 @@
 #include <signal.h> /* signal name macros, and the kill() prototype */
 #include <sys/stat.h>
 #include <string.h>
-const int FILE_BUF_SIZE = 4096; 
-const int REQUEST_BUF_SIZE = 1024; 
+const int BUF_SIZE = 4096;
+const int FILE_BUF_SIZE = 4096;  
 
 void sigchld_handler(int s)
 {
     while(waitpid(-1, NULL, WNOHANG) > 0);
 }
 
-void handle_request(int sock); /* function prototype */
-int send_response(int sock, char* request_uri);
-int send_http_error(int sock,char* status_code);
+void handle_request(int sock); 
+void send_response(int sock, char* request_uri);
+void send_http_error(int sock,char* status_code);
 
 void error(char *msg)
 {
@@ -36,7 +36,7 @@ int main(int argc, char *argv[])
         error("No port number provided");
     }
 
-    //get the point number from command line arg 
+    //get the port number from command line arg 
     portno = atoi(argv[1]);
 
     socklen_t clilen;
@@ -88,7 +88,7 @@ int main(int argc, char *argv[])
         else //returns the process ID of the child process to the parent
             close(newsockfd); // parent doesn't need this 
         } /* end of while */
-        return 0; /* we never get here */
+        return 0; 
 }
 
 /******** handle_request() *********************
@@ -99,23 +99,23 @@ int main(int argc, char *argv[])
 void handle_request(int sock)
 {
     int n;
-    char buffer[REQUEST_BUF_SIZE];
-    bzero(buffer,REQUEST_BUF_SIZE-1);
-    n = read(sock,buffer,REQUEST_BUF_SIZE-1);  // GET / HTTP/1.1
+    char buffer[BUF_SIZE];
+    bzero(buffer,BUF_SIZE-1);
+    n = read(sock,buffer,BUF_SIZE-1);  // GET / HTTP/1.1
                                 // GET /example.html HTTP/1.1
     if (n < 0) 
         error("ERROR reading from socket");
     else buffer[n] = '\0';
     
-    char method[20];
+    char method[64];
     char request_uri[n];
-    char http_version[20];
+    char http_version[32];
     sscanf(buffer, "%s %s %s", method, request_uri, http_version);
 
     //#1 for the project: dump message to console   
-    printf("Here is the message: \n%s\n",buffer);
+    printf("Here is the client's HTTP request message: \n%s\n",buffer);
 
-    //#2 for the project: send response to the client
+    //#2 for the project: send HTTP response to the client
     send_response(sock,request_uri);
 }
 
@@ -124,12 +124,12 @@ void handle_request(int sock)
  Request uri specifies the file requested by the client 
  CURRENT SUPPORTED FILE TYPES: HTML,JPEG,GIF
  *************************************************************/
-int send_response(int sock, char* request_uri)
+void send_response(int sock, char* request_uri)
 {
 
     //set the content-type
     char* extension = memchr(request_uri,'.',strlen(request_uri));
-    char content_type[32]; 
+    char content_type[64]; 
     if (extension)
     {
         if (!strcmp(extension,".jpeg") || !strcmp(extension,".jpg"))
@@ -140,7 +140,6 @@ int send_response(int sock, char* request_uri)
             strncpy(content_type,"text/html",31);
         else
         {
-            printf("sending ext error\n");
             send_http_error(sock,"400");
             error("Unsupported file type requested!\n");
         }
@@ -156,7 +155,7 @@ int send_response(int sock, char* request_uri)
     if (!(f = fopen(request_uri+1,"r")))
     {
         send_http_error(sock,"404");
-        error("failed to open file! \n");
+        error("Failed to open file! 404 sent to client\n");
     }
 
     //get the file size
@@ -168,15 +167,11 @@ int send_response(int sock, char* request_uri)
     char f_size_str[32];
     snprintf(f_size_str,31,"%d",f_size);
 
-    //create a timestamp string 
-    //create the header from previously parsed info and write it to the socket
-    char header[128 + strlen(content_type) + strlen(f_size_str)];
-    snprintf(header,511,"HTTP/1.1 200 OK\r\nContent-Type: \
+    //create the response header from previously parsed info and write it to the socket
+    char header[BUF_SIZE];
+    snprintf(header,BUF_SIZE-1,"HTTP/1.1 200 OK\r\nContent-Type: \
         %s\r\nContent-Length: %s\r\n\r\n", content_type, f_size_str);
     
-    //print out the header(FOR DEBUGGING)
-    printf("%s\n",header);
-
     if(write(sock,header,strlen(header)) < 0)
         error("Writing HTTP header failed!\n");
 
@@ -195,10 +190,9 @@ int send_response(int sock, char* request_uri)
           break; 
     }
 
-    return 0; 
 }
 
-int send_http_error(int sock,char* status_code)
+void send_http_error(int sock, char* status_code)
 {
     char status_msg[32]; 
     if (!strcmp(status_code,"404"))
@@ -206,12 +200,11 @@ int send_http_error(int sock,char* status_code)
     else if (!strcmp(status_code,"400"))
         strcpy(status_msg,"Bad Request");
     else
-        status_msg[0]='0'; 
+        status_msg[0]='\0'; 
 
-    char errmsg[1024];
-    snprintf(errmsg,1024,"HTTP/1.1 %s %s\r\n", status_code, status_msg);
-    write(sock,errmsg,strlen(errmsg));
-    printf("%s",errmsg);
-
-    return 0; 
+    char errmsg[BUF_SIZE];
+    snprintf(errmsg,BUF_SIZE,"HTTP/1.1 %s %s\r\n", status_code, status_msg);
+    
+    if(write(sock,errmsg,strlen(errmsg)) < 0 )
+    	error("Writing HTTP Error response header failed!\n"); 
 }
